@@ -20,11 +20,11 @@ type strategy int
 var OnForkHook func()
 
 const (
-	// The Single-exec strategy: parent forks child to exec with an inherited
+	//Single is  the Single-exec strategy: parent forks child to exec with an inherited
 	// net.Listener; child kills parent and becomes a child of init(8).
 	Single strategy = iota
 
-	// The Double-exec strategy: parent forks child to exec (first) with an
+	// Double is the Double-exec strategy: parent forks child to exec (first) with an
 	// inherited net.Listener; child signals parent to exec (second); parent
 	// kills child.
 	Double
@@ -53,6 +53,7 @@ var (
 	Strategy strategy = Single
 )
 
+// Service is a single service listening on a single net.Listener.
 type Service struct {
 	Name       string
 	FdName     string
@@ -61,9 +62,18 @@ type Service struct {
 	Hooks      Hooks
 }
 
+// Hooks callbacks invoked when specific signal is received.
 type Hooks struct {
-	OnSIGHUP  func(l net.Listener) error
-	OnSIGUSR1 func(l net.Listener) error
+	// OnSIGHUP is the function called when the server receives a SIGHUP
+	// signal. The normal use case for SIGHUP is to reload the
+	// configuration.
+	OnSIGHUP func(*Service) error
+	// OnSIGUSR1 is the function called when the server receives a
+	// SIGUSR1 signal. The normal use case for SIGUSR1 is to repon the
+	// log files.
+	OnSIGUSR1 func(l *Service) error
+	// OnSIGQUIT use this for graceful shutdown
+	OnSIGQUIT func(*Service) error
 }
 
 type Again struct {
@@ -83,26 +93,13 @@ func (a *Again) Env() (m map[string]string, err error) {
 	a.services.Range(func(k, value interface{}) bool {
 		s := value.(*Service)
 		names = append(names, s.Name)
-		v := reflect.ValueOf(s.Listener).Elem().FieldByName("fd").Elem()
-		fdField := v.FieldByName("sysfd")
-
-		if !fdField.IsValid() {
-			fdField = v.FieldByName("pfd").FieldByName("Sysfd")
-		}
-
-		if !fdField.IsValid() {
-			err = fmt.Errorf("Not supported by current Go version")
-			return false
-		}
-		fd := uintptr(fdField.Int())
-		s.Descriptor = fd
-		_, _, e1 := syscall.Syscall(syscall.SYS_FCNTL, fd, syscall.F_SETFD, 0)
+		_, _, e1 := syscall.Syscall(syscall.SYS_FCNTL, s.Descriptor, syscall.F_SETFD, 0)
 		if 0 != e1 {
 			err = e1
 			return false
 		}
-		fds = append(fds, fmt.Sprint(fd))
-		fdNames = append(fdNames, ListerName(s.Listener))
+		fds = append(fds, fmt.Sprint(s.Descriptor))
+		fdNames = append(fdNames, s.FdName)
 		return true
 	})
 	if err != nil {
@@ -128,11 +125,26 @@ func (a *Again) Range(fn func(*Service)) {
 	})
 }
 
-func (a *Again) Listen(name string, ls net.Listener) {
+// Listen creates a new service with the given listener.
+func (a *Again) Listen(name string, ls net.Listener) error {
+	v := reflect.ValueOf(ls).Elem().FieldByName("fd").Elem()
+	fdField := v.FieldByName("sysfd")
+
+	if !fdField.IsValid() {
+		fdField = v.FieldByName("pfd").FieldByName("Sysfd")
+	}
+
+	if !fdField.IsValid() {
+		return fmt.Errorf("Not supported by current Go version")
+	}
+	fd := uintptr(fdField.Int())
 	a.services.Store(name, &Service{
-		Name:     name,
-		Listener: ls,
+		Name:       name,
+		FdName:     ListerName(ls),
+		Listener:   ls,
+		Descriptor: fd,
 	})
+	return nil
 }
 
 // Re-exec this same image without dropping the net.Listener.
@@ -217,7 +229,7 @@ func ForkExec(a *Again) error {
 	return nil
 }
 
-// Test whether an error is equivalent to net.errClosing as returned by
+// IsErrClosing tests whether an error is equivalent to net.errClosing as returned by
 // Accept during a graceful exit.
 func IsErrClosing(err error) bool {
 	if opErr, ok := err.(*net.OpError); ok {
@@ -250,7 +262,11 @@ func Kill() error {
 	return syscall.Kill(pid, sig)
 }
 
-func Listener(forkHook func()) (*Again, error) {
+// Listen checks env and constructs a Again instance if this is a child process
+// that was froked by again parent.
+//
+// forkHook if provided will be called before forking.
+func Listen(forkHook func()) (*Again, error) {
 	OnForkHook = forkHook
 	a := &Again{services: &sync.Map{}}
 	fds := strings.Split(os.Getenv("GOAGAIN_FD"), ",")
@@ -289,6 +305,7 @@ func Listener(forkHook func()) (*Again, error) {
 	return a, nil
 }
 
+// Wait waits for signals
 func Wait(a *Again) (syscall.Signal, error) {
 	ch := make(chan os.Signal, 2)
 	signal.Notify(
@@ -310,7 +327,7 @@ func Wait(a *Again) (syscall.Signal, error) {
 		case syscall.SIGHUP:
 			a.Range(func(s *Service) {
 				if s.Hooks.OnSIGHUP != nil {
-					if err := s.Hooks.OnSIGHUP(s.Listener); err != nil {
+					if err := s.Hooks.OnSIGHUP(s); err != nil {
 						log.Println("OnSIGHUP:", err)
 					}
 				}
@@ -322,6 +339,13 @@ func Wait(a *Again) (syscall.Signal, error) {
 
 		// SIGQUIT should exit gracefully.
 		case syscall.SIGQUIT:
+			a.Range(func(s *Service) {
+				if s.Hooks.OnSIGQUIT != nil {
+					if err := s.Hooks.OnSIGQUIT(s); err != nil {
+						log.Println("OnSIGQUIT:", err)
+					}
+				}
+			})
 			return syscall.SIGQUIT, nil
 
 		// SIGTERM should exit.
@@ -332,7 +356,7 @@ func Wait(a *Again) (syscall.Signal, error) {
 		case syscall.SIGUSR1:
 			a.Range(func(s *Service) {
 				if s.Hooks.OnSIGHUP != nil {
-					if err := s.Hooks.OnSIGUSR1(s.Listener); err != nil {
+					if err := s.Hooks.OnSIGUSR1(s); err != nil {
 						log.Println("OnSIGUSR1:", err)
 					}
 				}
