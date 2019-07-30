@@ -16,20 +16,7 @@ import (
 	"syscall"
 )
 
-type strategy int
-
 var OnForkHook func()
-
-const (
-	//Single is  the Single-exec strategy: parent forks child to exec with an inherited
-	// net.Listener; child kills parent and becomes a child of init(8).
-	Single strategy = iota
-
-	// Double is the Double-exec strategy: parent forks child to exec (first) with an
-	// inherited net.Listener; child signals parent to exec (second); parent
-	// kills child.
-	Double
-)
 
 // Don't make the caller import syscall.
 const (
@@ -38,9 +25,6 @@ const (
 	SIGTERM = syscall.SIGTERM
 	SIGUSR2 = syscall.SIGUSR2
 )
-
-// Strategy is the strategy to use; Single by default.
-var Strategy strategy = Single
 
 // Service is a single service listening on a single net.Listener.
 type Service struct {
@@ -199,12 +183,8 @@ func ForkExec(a *Again) error {
 	); nil != err {
 		return err
 	}
-	var sig syscall.Signal
-	if Double == Strategy {
-		sig = syscall.SIGUSR2
-	} else {
-		sig = syscall.SIGQUIT
-	}
+
+	sig := syscall.SIGQUIT
 	if err := os.Setenv("GOAGAIN_SIGNAL", fmt.Sprintf("%d", sig)); nil != err {
 		return err
 	}
@@ -259,9 +239,6 @@ func Kill() error {
 	}
 	if _, err := fmt.Sscan(os.Getenv("GOAGAIN_SIGNAL"), &sig); nil != err {
 		sig = syscall.SIGQUIT
-	}
-	if syscall.SIGQUIT == sig && Double == Strategy {
-		go syscall.Wait4(pid, nil, 0, nil)
 	}
 	log.Println("sending signal", sig, "to process", pid)
 	return syscall.Kill(pid, sig)
