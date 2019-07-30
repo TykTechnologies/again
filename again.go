@@ -1,6 +1,7 @@
 package again
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -38,20 +39,8 @@ const (
 	SIGUSR2 = syscall.SIGUSR2
 )
 
-var (
-	// OnSIGHUP is the function called when the server receives a SIGHUP
-	// signal. The normal use case for SIGHUP is to reload the
-	// configuration.
-	OnSIGHUP func(l net.Listener) error
-
-	// OnSIGUSR1 is the function called when the server receives a
-	// SIGUSR1 signal. The normal use case for SIGUSR1 is to repon the
-	// log files.
-	OnSIGUSR1 func(l net.Listener) error
-
-	// The strategy to use; Single by default.
-	Strategy strategy = Single
-)
+// Strategy is the strategy to use; Single by default.
+var Strategy strategy = Single
 
 // Service is a single service listening on a single net.Listener.
 type Service struct {
@@ -124,6 +113,21 @@ func (a *Again) Range(fn func(*Service)) {
 		fn(s)
 		return true
 	})
+}
+
+// Close tries to close all service listeners
+func (a *Again) Close() error {
+	var e bytes.Buffer
+	a.Range(func(s *Service) {
+		if err := s.Listener.Close(); err != nil {
+			e.WriteString(err.Error())
+			e.WriteByte('\n')
+		}
+	})
+	if e.Len() > 0 {
+		return errors.New(e.String())
+	}
+	return nil
 }
 
 // Listen creates a new service with the given listener.
