@@ -76,6 +76,7 @@ type Hooks struct {
 	OnSIGQUIT func(*Service) error
 }
 
+// Again manages services that need graceful restarts
 type Again struct {
 	services *sync.Map
 }
@@ -268,7 +269,7 @@ func Kill() error {
 // forkHook if provided will be called before forking.
 func Listen(forkHook func()) (*Again, error) {
 	OnForkHook = forkHook
-	a := &Again{services: &sync.Map{}}
+	a := New()
 	fds := strings.Split(os.Getenv("GOAGAIN_FD"), ",")
 	names := strings.Split(os.Getenv("GOAGAIN_SERVICE_NAME"), ",")
 	fdNames := strings.Split(os.Getenv("GOAGAIN_NAME"), ",")
