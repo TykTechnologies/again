@@ -366,7 +366,9 @@ func Wait(a *Again) (syscall.Signal, error) {
 		// SIGUSR2 forks and re-execs the first time it is received and execs
 		// without forking from then on.
 		case syscall.SIGUSR2:
-			OnForkHook()
+			if OnForkHook != nil {
+				OnForkHook()
+			}
 			if forked {
 				return syscall.SIGUSR2, nil
 			}
