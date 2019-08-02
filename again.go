@@ -249,42 +249,49 @@ func Kill() error {
 //
 // forkHook if provided will be called before forking.
 func Listen(forkHook func()) (*Again, error) {
-	OnForkHook = forkHook
 	a := New()
+	if err := ListenFrom(a, forkHook); err != nil {
+		return nil, err
+	}
+	return a, nil
+}
+
+func ListenFrom(a *Again, forkHook func()) error {
+	OnForkHook = forkHook
 	fds := strings.Split(os.Getenv("GOAGAIN_FD"), ",")
 	names := strings.Split(os.Getenv("GOAGAIN_SERVICE_NAME"), ",")
 	fdNames := strings.Split(os.Getenv("GOAGAIN_NAME"), ",")
 	if !((len(fds) == len(names)) && (len(fds) == len(fdNames))) {
-		return nil, errors.New(("again: names/fds mismatch"))
+		errors.New(("again: names/fds mismatch"))
 	}
 	for k, f := range fds {
 		var s Service
 		_, err := fmt.Sscan(f, &s.Descriptor)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		s.Name = names[k]
 		s.FdName = fdNames[k]
 		l, err := net.FileListener(os.NewFile(s.Descriptor, s.FdName))
 		if err != nil {
-			return nil, err
+			return err
 		}
 		s.Listener = l
 		switch l.(type) {
 		case *net.TCPListener, *net.UnixListener:
 		default:
-			return nil, fmt.Errorf(
+			return fmt.Errorf(
 				"file descriptor is %T not *net.TCPListener or *net.UnixListener",
 				l,
 			)
 		}
 		if err = syscall.Close(int(s.Descriptor)); nil != err {
-			return nil, err
+			return err
 		}
 		fmt.Println("=> ", s.Name, s.FdName)
 		a.services.Store(s.Name, &s)
 	}
-	return a, nil
+	return nil
 }
 
 // Wait waits for signals
