@@ -236,6 +236,17 @@ func IsErrClosing(err error) bool {
 	return "use of closed network connection" == err.Error()
 }
 
+// Child returns true if this process is managed by again and its a child
+// process.
+func Child() bool {
+	var pid int
+	_, err := fmt.Sscan(os.Getenv("GOAGAIN_PID"), &pid)
+	if io.EOF == err {
+		_, err = fmt.Sscan(os.Getenv("GOAGAIN_PPID"), &pid)
+	}
+	return err == nil
+}
+
 // Kill process specified in the environment with the signal specified in the
 // environment; default to SIGQUIT.
 func Kill() error {
