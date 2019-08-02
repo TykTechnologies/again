@@ -43,7 +43,7 @@ type Hooks struct {
 	// OnSIGUSR1 is the function called when the server receives a
 	// SIGUSR1 signal. The normal use case for SIGUSR1 is to repon the
 	// log files.
-	OnSIGUSR1 func(l *Service) error
+	OnSIGUSR1 func(*Again) error
 	// OnSIGQUIT use this for graceful shutdown
 	OnSIGQUIT func(*Again) error
 	OnSIGTERM func(*Again) error
@@ -360,13 +360,11 @@ func Wait(a *Again) (syscall.Signal, error) {
 
 		// SIGUSR1 should reopen logs.
 		case syscall.SIGUSR1:
-			a.Range(func(s *Service) {
-				if a.Hooks.OnSIGHUP != nil {
-					if err := a.Hooks.OnSIGUSR1(s); err != nil {
-						log.Println("OnSIGUSR1:", err)
-					}
+			if a.Hooks.OnSIGUSR1 != nil {
+				if err := a.Hooks.OnSIGUSR1(a); err != nil {
+					log.Println("OnSIGUSR1:", err)
 				}
-			})
+			}
 
 		// SIGUSR2 forks and re-execs the first time it is received and execs
 		// without forking from then on.
