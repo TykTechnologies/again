@@ -55,8 +55,8 @@ type Again struct {
 	Hooks    Hooks
 }
 
-func New() *Again {
-	return &Again{
+func New() Again {
+	return Again{
 		services: &sync.Map{},
 	}
 }
@@ -101,7 +101,7 @@ func (a *Again) Range(fn func(*Service)) {
 }
 
 // Close tries to close all service listeners
-func (a *Again) Close() error {
+func (a Again) Close() error {
 	var e bytes.Buffer
 	a.Range(func(s *Service) {
 		if err := s.Listener.Close(); err != nil {
@@ -258,10 +258,10 @@ func Kill() error {
 // forkHook if provided will be called before forking.
 func Listen(forkHook func()) (*Again, error) {
 	a := New()
-	if err := ListenFrom(a, forkHook); err != nil {
+	if err := ListenFrom(&a, forkHook); err != nil {
 		return nil, err
 	}
-	return a, nil
+	return &a, nil
 }
 
 func ListenFrom(a *Again, forkHook func()) error {
@@ -273,6 +273,9 @@ func ListenFrom(a *Again, forkHook func()) error {
 		errors.New(("again: names/fds mismatch"))
 	}
 	for k, f := range fds {
+		if f == "" {
+			continue
+		}
 		var s Service
 		_, err := fmt.Sscan(f, &s.Descriptor)
 		if err != nil {

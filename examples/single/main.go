@@ -20,7 +20,8 @@ func main() {
 	// Inherit a net.Listener from our parent process or listen anew.
 	w, err := again.Listen(func() {})
 	if nil != err {
-		w = again.New()
+		x := again.New()
+		w = &x
 		for i := 0; i < 5; i++ {
 			// Listen on a TCP or a UNIX domain socket (TCP here).
 			l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:400%d", i))
