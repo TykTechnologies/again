@@ -32,7 +32,6 @@ type Service struct {
 	FdName     string
 	Descriptor uintptr
 	Listener   net.Listener
-	Hooks      Hooks
 }
 
 // Hooks callbacks invoked when specific signal is received.
@@ -47,11 +46,13 @@ type Hooks struct {
 	OnSIGUSR1 func(l *Service) error
 	// OnSIGQUIT use this for graceful shutdown
 	OnSIGQUIT func(*Service) error
+	OnSIGTERM func(*Service) error
 }
 
 // Again manages services that need graceful restarts
 type Again struct {
 	services *sync.Map
+	Hooks    Hooks
 }
 
 func New() *Again {
@@ -315,8 +316,8 @@ func Wait(a *Again) (syscall.Signal, error) {
 		// SIGHUP should reload configuration.
 		case syscall.SIGHUP:
 			a.Range(func(s *Service) {
-				if s.Hooks.OnSIGHUP != nil {
-					if err := s.Hooks.OnSIGHUP(s); err != nil {
+				if a.Hooks.OnSIGHUP != nil {
+					if err := a.Hooks.OnSIGHUP(s); err != nil {
 						log.Println("OnSIGHUP:", err)
 					}
 				}
@@ -329,8 +330,8 @@ func Wait(a *Again) (syscall.Signal, error) {
 		// SIGQUIT should exit gracefully.
 		case syscall.SIGQUIT:
 			a.Range(func(s *Service) {
-				if s.Hooks.OnSIGQUIT != nil {
-					if err := s.Hooks.OnSIGQUIT(s); err != nil {
+				if a.Hooks.OnSIGQUIT != nil {
+					if err := a.Hooks.OnSIGQUIT(s); err != nil {
 						log.Println("OnSIGQUIT:", err)
 					}
 				}
@@ -339,13 +340,20 @@ func Wait(a *Again) (syscall.Signal, error) {
 
 		// SIGTERM should exit.
 		case syscall.SIGTERM:
+			a.Range(func(s *Service) {
+				if a.Hooks.OnSIGTERM != nil {
+					if err := a.Hooks.OnSIGHUP(s); err != nil {
+						log.Println("OnSIGTERM:", err)
+					}
+				}
+			})
 			return syscall.SIGTERM, nil
 
 		// SIGUSR1 should reopen logs.
 		case syscall.SIGUSR1:
 			a.Range(func(s *Service) {
-				if s.Hooks.OnSIGHUP != nil {
-					if err := s.Hooks.OnSIGUSR1(s); err != nil {
+				if a.Hooks.OnSIGHUP != nil {
+					if err := a.Hooks.OnSIGUSR1(s); err != nil {
 						log.Println("OnSIGUSR1:", err)
 					}
 				}
