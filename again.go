@@ -39,14 +39,14 @@ type Hooks struct {
 	// OnSIGHUP is the function called when the server receives a SIGHUP
 	// signal. The normal use case for SIGHUP is to reload the
 	// configuration.
-	OnSIGHUP func(*Service) error
+	OnSIGHUP func(*Again) error
 	// OnSIGUSR1 is the function called when the server receives a
 	// SIGUSR1 signal. The normal use case for SIGUSR1 is to repon the
 	// log files.
 	OnSIGUSR1 func(l *Service) error
 	// OnSIGQUIT use this for graceful shutdown
-	OnSIGQUIT func(*Service) error
-	OnSIGTERM func(*Service) error
+	OnSIGQUIT func(*Again) error
+	OnSIGTERM func(*Again) error
 }
 
 // Again manages services that need graceful restarts
@@ -330,13 +330,11 @@ func Wait(a *Again) (syscall.Signal, error) {
 
 		// SIGHUP should reload configuration.
 		case syscall.SIGHUP:
-			a.Range(func(s *Service) {
-				if a.Hooks.OnSIGHUP != nil {
-					if err := a.Hooks.OnSIGHUP(s); err != nil {
-						log.Println("OnSIGHUP:", err)
-					}
+			if a.Hooks.OnSIGHUP != nil {
+				if err := a.Hooks.OnSIGHUP(a); err != nil {
+					log.Println("OnSIGHUP:", err)
 				}
-			})
+			}
 
 		// SIGINT should exit.
 		case syscall.SIGINT:
@@ -344,24 +342,20 @@ func Wait(a *Again) (syscall.Signal, error) {
 
 		// SIGQUIT should exit gracefully.
 		case syscall.SIGQUIT:
-			a.Range(func(s *Service) {
-				if a.Hooks.OnSIGQUIT != nil {
-					if err := a.Hooks.OnSIGQUIT(s); err != nil {
-						log.Println("OnSIGQUIT:", err)
-					}
+			if a.Hooks.OnSIGQUIT != nil {
+				if err := a.Hooks.OnSIGQUIT(a); err != nil {
+					log.Println("OnSIGQUIT:", err)
 				}
-			})
+			}
 			return syscall.SIGQUIT, nil
 
 		// SIGTERM should exit.
 		case syscall.SIGTERM:
-			a.Range(func(s *Service) {
-				if a.Hooks.OnSIGTERM != nil {
-					if err := a.Hooks.OnSIGHUP(s); err != nil {
-						log.Println("OnSIGTERM:", err)
-					}
+			if a.Hooks.OnSIGTERM != nil {
+				if err := a.Hooks.OnSIGHUP(a); err != nil {
+					log.Println("OnSIGTERM:", err)
 				}
-			})
+			}
 			return syscall.SIGTERM, nil
 
 		// SIGUSR1 should reopen logs.
