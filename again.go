@@ -55,9 +55,14 @@ type Again struct {
 	Hooks    Hooks
 }
 
-func New() Again {
+func New(hooks ...Hooks) Again {
+	var h Hooks
+	if len(hooks) > 0 {
+		h = hooks[0]
+	}
 	return Again{
 		services: &sync.Map{},
+		Hooks:    h,
 	}
 }
 
