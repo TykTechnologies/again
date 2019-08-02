@@ -136,6 +136,13 @@ func (a *Again) Listen(name string, ls net.Listener) error {
 	})
 	return nil
 }
+func (a *Again) Get(name string) *Service {
+	s, _ := a.services.Load(name)
+	if s != nil {
+		return s.(*Service)
+	}
+	return nil
+}
 
 // Re-exec this same image without dropping the net.Listener.
 func Exec(a *Again) error {
