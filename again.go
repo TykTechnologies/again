@@ -150,6 +150,10 @@ func (a Again) Get(name string) *Service {
 	return nil
 }
 
+func (a Again) Delete(name string) {
+	a.services.Delete(name)
+}
+
 func (a Again) GetListener(key string) net.Listener {
 	if s := a.Get(key); s != nil {
 		return s.Listener
