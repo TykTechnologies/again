@@ -141,10 +141,18 @@ func (a *Again) Listen(name string, ls net.Listener) error {
 	})
 	return nil
 }
-func (a *Again) Get(name string) *Service {
+
+func (a Again) Get(name string) *Service {
 	s, _ := a.services.Load(name)
 	if s != nil {
 		return s.(*Service)
+	}
+	return nil
+}
+
+func (a Again) GetListener(key string) net.Listener {
+	if s := a.Get(key); s != nil {
+		return s.Listener
 	}
 	return nil
 }
