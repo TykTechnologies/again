@@ -325,7 +325,7 @@ func ListenFrom(a *Again, forkHook func()) error {
 	names := strings.Split(os.Getenv("GOAGAIN_SERVICE_NAME"), ",")
 	fdNames := strings.Split(os.Getenv("GOAGAIN_NAME"), ",")
 	if !((len(fds) == len(names)) && (len(fds) == len(fdNames))) {
-		errors.New(("again: names/fds mismatch"))
+		return errors.New(("again: names/fds mismatch"))
 	}
 	for k, f := range fds {
 		if f == "" {
