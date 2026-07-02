@@ -375,7 +375,6 @@ func Wait(a *Again) (syscall.Signal, error) {
 	forked := false
 	for {
 		sig := <-ch
-		log.Println(sig.String())
 		switch sig {
 
 		// SIGHUP should reload configuration.
